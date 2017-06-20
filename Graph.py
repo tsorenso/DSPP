@@ -9,6 +9,7 @@ Created on Wed Jun 14 13:29:45 2017
 
 import numpy as np
 
+
 class Node(object):
     def __init__(self,name,value =0, change_rate = 0):
         self.name = name
