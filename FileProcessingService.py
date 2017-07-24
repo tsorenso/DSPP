@@ -10,9 +10,6 @@ class FileProcessingService(object):
     GENERATED_FOLDER_NAME = "/GenomeFiles"
     GENOMES_FILE_NAME = "Genomes.txt"
     IDENTIFIER_REGEX = re.compile(r'\$.+\$')
-    DEFAULT_GAUSSIAN_STANDARD_DEVIATION = 0.1
-
-    num_generated_coefficients = 0
 
     def __init__(self, data_file, file_type, number_of_genomes, path):
         self.data_file = data_file
@@ -35,6 +32,7 @@ class FileProcessingService(object):
         genomes = {}
         for genome in range(1, self.number_of_genomes + 1):
             genome_name = file_name_root + str(genome) #Note - changed this to a parameter for SIM1
+
             coefficient_map = {}
             new_m_file = open(path + "/" + genome_name + "." + self.file_type, "w")
             genomes_file_list.append(genome_name + "." + self.file_type)
@@ -61,7 +59,6 @@ class FileProcessingService(object):
             new_m_file.close()
 
             self.data_file.seek(0)
-            self.num_generated_coefficients = 0
             genomes[genome_name] = coefficient_map
 
         self.writeGenomesKeyFilesToDirectory(genomes, path)
@@ -78,46 +75,27 @@ class FileProcessingService(object):
         return target_directory
 
     def extractCoefficientName(self, target_sequence):
-        if "name=" in target_sequence:
-            return target_sequence.split("name=")[1].strip()
-        else:
-            self.num_generated_coefficients += 1
-            return "coefficient" + str(self.num_generated_coefficients)
-
-    def extractDistributionName(self, target_sequence):
-        if "name=" in target_sequence or ("(" in target_sequence and ")" in target_sequence):
-            distribution_name = re.findall(r'[a-z]*', target_sequence.split("name=")[0])[0]
-            if distribution_name == '':
-                return SupportedDistributions.GAUSS
-            else:
-                return distribution_name
-        else:
-            return SupportedDistributions.GAUSS
+        return target_sequence.split("name=")[1].strip()
 
     def extractParameters(self, target_sequence):
         if self.file_type == SupportedFileTypes.R:
-            if "(" in target_sequence and ")" in target_sequence:
-                regex = re.compile(r'\(.+\)')
-                search_result = regex.search(target_sequence)
-                sequence = target_sequence[(search_result.regs[0][0] + 1):(search_result.regs[0][1] - 1)]
-                return [param.strip() for param in sequence.split(",")]
-            else:
-                regex = re.compile(r'\d+')
-                return [substring for substring in re.findall(regex, target_sequence.split("name=")[0])]
+            regex = re.compile(r'\(.+\)')
+            search_result = regex.search(target_sequence)
+            sequence = target_sequence[(search_result.regs[0][0] + 1):(search_result.regs[0][1] - 1)]
+            return sequence.split(",")
         elif self.file_type == SupportedFileTypes.MATLAB:
-            pattern = re.compile('-?\ *[0-9]+\.?[0-9]*(?:[Ee]\ *-?\ *[0-9]+)?')  # now supports scientific notation
-            return [param.strip() for param in re.findall(pattern, target_sequence.split("name=")[0])]
+            pattern = re.compile('-?\ *[0-9]+\.?[0-9]*(?:[Ee]\ *-?\ *[0-9]+)?') # now supports scientific notation
+            return [float(substring) for substring in re.findall(pattern, target_sequence.split("name=")[0])]
+
+    def extractDistributionName(self, target_sequence):
+        return re.findall(r'[a-z]*', target_sequence.split("name=")[0])[0]
 
     def retrieveCoefficientValueFromDistribution(self, distribution, params):
         # Selection from a series of both discrete and continuous probability distributions
         if distribution == SupportedDistributions.UNIFORM:
             return self.generateRandomValueFromUniformDistribution(params[0], params[1])
         elif distribution == SupportedDistributions.GAUSS:  # changed form GAUSSIAN TO GAUSS
-            if len(params) <= 1:
-                return self.generateRandomValueFromGaussianDistribution(params[0],
-                                                                        self.DEFAULT_GAUSSIAN_STANDARD_DEVIATION)
-            else:
-                return self.generateRandomValueFromGaussianDistribution(params[0], params[1])
+            return self.generateRandomValueFromGaussianDistribution(params[0], params[1])
         elif distribution == SupportedDistributions.DISCRETE:
             return self.generateRandomValueFromDiscreteDistribution(params)  # TODO - test this
         elif distribution == SupportedDistributions.GAMMA:
@@ -136,27 +114,26 @@ class FileProcessingService(object):
             raise ValueError('Unsupported distribution: ' + distribution)
 
     def generateRandomValueFromUniformDistribution(self, mini, maxi):
-        return random.uniform(float(mini), float(maxi))
+        return random.uniform(mini, maxi)
 
     def generateRandomValueFromGaussianDistribution(self, mu, sigma):
-        return random.gauss(float(mu), float(sigma))
+        return random.gauss(mu, sigma)
 
     def generateRandomValueFromDiscreteDistribution(self, values):
         return random.choice(values)
 
     def generateRandomValueFromGammaDistribution(self, k, theta):
-        return random.gamma(float(k), float(theta))
+        return random.gamma(k, theta)
 
     def generateRandomValueFromLogNormalDistribution(self, mu, sigma):
-        return random.lognormal(float(mu), float(sigma))
+        return random.lognormal(mu, sigma)
 
     def generateRandomValueFromBinomialDistribution(self, n, p):
-        return random.binomial(float(n), float(p))
+        return random.binomial(n, p)
 
     def generateRandomValueFromPoissonDistribution(self, k, lmbda):
-        return random.poisson(float(k), float(lmbda))
+        return random.poisson(k, lmbda)
 
-    # Only supported for R
     def pickBoolean(self, probability_of_zero):
         val = random.uniform(0, 1)
         if val < float(probability_of_zero):
@@ -164,13 +141,12 @@ class FileProcessingService(object):
         else:
             return 1
 
-    # Only supported for R
     def pickMutation(self, node, probability_of_knock_out, probability_of_over_expression):
         val = random.uniform(0, 1)
         if val < float(probability_of_knock_out):
-            return "fixGenes( network, " + '"' + str(node) + '"' + ", 0)"
+            return "fixGenes( network, " + '"' + node + '"' + ", 0)"
         elif val > float(probability_of_knock_out) and val < (float(probability_of_over_expression) + float(probability_of_knock_out)):
-            return "fixGenes( network, " + '"' + str(node) + '"' + ", 1)"
+            return "fixGenes( network, " + '"' + node + '"' + ", 1)"
         else:
             return ""
 
